@@ -6,8 +6,9 @@ const KeyCounter = require('./class/KeyCounter');
 const Validator = require('./class/__Validator');
 const WalletValidator = require('./class/WalletValidator');
 const Currency = require('./class/Currency');
-const findLackPlayers = require('./class/findLackPlayers');
-const walletTransfer = require('./class/walletTransfer');
+//const findLackPlayers = require('./class/findLackPlayers');
+const walletTransfer_preset = require('./class/walletTransfer_preset');
+const walletTransfer_update = require('./class/walletTransfer_update');
 
 const util = require('./util');
 
@@ -83,14 +84,19 @@ const menu = [
 		entity: new Validator('Account:*', true),
 		reply: ''
 	},
+	// {
+	// 	msg: 'Find Out Lack Players',
+	// 	entity: new findLackPlayers('Player:*', true),
+	// 	reply: ''
+	// },
 	{
-		msg: 'Find Out Lack Players',
-		entity: new findLackPlayers('Player:*', true),
+		msg: 'wallet transfer preset',
+		entity: new walletTransfer_preset('Player:*', true),
 		reply: ''
 	},
 	{
-		msg: 'wallet transfer',
-		entity: new walletTransfer('Player:*', true),
+		msg: 'wallet transfer update',
+		entity: new walletTransfer_update('Player:*', true),
 		reply: ''
 	},
 ]

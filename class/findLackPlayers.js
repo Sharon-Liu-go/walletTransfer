@@ -3,11 +3,11 @@ const mysql = require('mysql2/promise');
 
 const util = require('../util');
 const ERR = require('../config/error');
-const config = {
-    redis: require('../config/redis').redis,
-    redis1: require('../config/redis').redis1,
-    mysql: require('../config/mysql')
-};
+// const config = {
+//     redis: require('../config/redis').redis,
+//     //redis1: require('../config/redis').redis1,
+//     mysql: require('../config/mysql')
+// };
 
 class findLackPlayers {
     constructor (pattern, flag) {
