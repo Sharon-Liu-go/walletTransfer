@@ -1,0 +1,6 @@
+{"status":"rejected","reason":{"command":{"name":"hgetall","args":["Player:test001"]}}}
+{"status":"rejected","reason":{"command":{"name":"hgetall","args":["Player:test002"]}}}
+{"status":"rejected","reason":{"command":{"name":"hgetall","args":["Player:test001"]}}}
+{"status":"rejected","reason":{"command":{"name":"hgetall","args":["Player:test002"]}}}
+{"status":"rejected","reason":{"command":{"name":"hgetall","args":["Player:test001"]}}}
+{"status":"rejected","reason":{"command":{"name":"hgetall","args":["Player:test002"]}}}
