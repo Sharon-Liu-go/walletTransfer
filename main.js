@@ -9,6 +9,7 @@ const Currency = require('./class/Currency');
 //const findLackPlayers = require('./class/findLackPlayers');
 const walletTransfer_preset = require('./class/walletTransfer_preset');
 const walletTransfer_update = require('./class/walletTransfer_update');
+const walletTransfer_preset_check = require('./class/walletTransfer_preset_check');
 
 const util = require('./util');
 
@@ -20,6 +21,8 @@ const TIMER = {
 }
 
 const pattern = process.env.COMMAND_PATTERN || '';
+
+console.log('當前檔案的位置:', __dirname);
 
 const menu = [
 	{
@@ -99,9 +102,12 @@ const menu = [
 		entity: new walletTransfer_update('Player:*', true),
 		reply: ''
 	},
+	{
+		msg: 'wallet transfer preset check',
+		entity: new walletTransfer_preset_check(__dirname),
+		reply: ''
+	},
 ]
-
-
 const target = [
 	{
 		msg: 'Account:*',
