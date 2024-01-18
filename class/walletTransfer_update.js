@@ -31,11 +31,9 @@ class walletTransfer_update {
         this.flag = flag || false;
         this.agentMoneyType = {}
 
-        //this.finishRedisScan = false
         this.redisScaned = 0
         this.uniqueAccount = new Set();
         this.failAndNoNeedreTry = 0
-        //this.affectedRows = 0
         this.insertDuplicates = 0
         this.updatePlayer = 0
     }
@@ -68,7 +66,6 @@ class walletTransfer_update {
             this.stream.on("data", async (key) => {               
                 this.stream.pause();
                 this.redisScaned += key.length;
-                console.log('*****************')
                 console.time('batch')
                 console.log('scan data ',  key.length)
                 await this.batchHgetAllValue(key)
@@ -79,7 +76,6 @@ class walletTransfer_update {
             this.stream.on("end", () => {
                 util.log("All keys have been visited!!!")
                 util.save('./export/walletTransfer_log.json', `redis Scaned : ${this.redisScaned},update Player: ${this.updatePlayer},資料有錯:${this.failAndNoNeedreTry},warning status: ${this.insertDuplicates}`);
-                //this.finishRedisScan = true;
                 console.timeEnd('redisScan')
             });
        });
@@ -94,27 +90,27 @@ class walletTransfer_update {
         const player_info_values = [];
         await Promise.allSettled(results.map(async (result) => {
             if (result.status === 'fulfilled') {
-                if (result.value.v.updateTime >= process.env.PLAYER_UPDATETIME || true) {
+                if (result.value.v.updateTime >= process.env.PLAYER_UPDATETIME) {
                     this.updatePlayer++
 
                     if (!result.value.v.platformId || !result.value.v.accountId || isNaN(result.value.v.gold)) {//gold若是空字串則視為0
                     this.failAndNoNeedreTry++
-                    util.save('./export/failAndNoNeedreTry/batchHgetAllValue_invalidVal.csv', '[no platformId、accountId、gold or gold is NaN]: ' + JSON.stringify(result) )
+                    util.save('./export/failAndNoNeedreTry/batchHgetAllValue_invalidVal.csv', `"[no platformId、accountId、gold or gold is NaN]" : '${JSON.stringify(result)}'` )
                     return;
                 }
                 if (result.value.v.accountId.length > 190) {
                     this.failAndNoNeedreTry++
-                    util.save('./export/failAndNoNeedreTry/batchHgetAllValue_invalidVal.csv', '[account too log]: ' + JSON.stringify(result) )
+                    util.save('./export/failAndNoNeedreTry/batchHgetAllValue_invalidVal.csv', `"[account too log]" : '${JSON.stringify(result)}'`)
                     return;
                 }
                 if (this.uniqueAccount.has(result.value.v.accountId.toLowerCase().trim())) {
                     this.failAndNoNeedreTry++
-                    util.save('./export/failAndNoNeedreTry/batchHgetAllValue_account_repeat.json', '[accountId大小寫重複]: ' + result.value.v.accountId + ' , ' + JSON.stringify(result) )
+                    util.save('./export/failAndNoNeedreTry/batchHgetAllValue_account_repeat.json', `"[accountId大小寫重複]" : "${result.value.v.accountId}" : '${JSON.stringify(result)}'`)
                     return;
                 }
                 if (!this.agentMoneyType[result.value.v.platformId]) {
                     this.failAndNoNeedreTry++
-                    util.save('./export/failAndNoNeedreTry/batchHgetAllValue_invalidVal.csv', '[no agent in agentMoneyTypeMapping]: ' + JSON.stringify(result) )
+                    util.save('./export/failAndNoNeedreTry/batchHgetAllValue_invalidVal.csv', `"[no agent in agentMoneyTypeMapping]": '${JSON.stringify(result)}'`);
                     return;
                 }
                 const goldInRedis = parseFloat(result.value.v.gold);
@@ -124,10 +120,9 @@ class walletTransfer_update {
                 return;
                 }
                 return;
-               
             }
             this.failAndNoNeedreTry++
-            util.save('./export/failAndNoNeedreTry/batchHgetAllValue_fail.json', JSON.stringify(result))
+            util.save('./export/failAndNoNeedreTry/batchHgetAllValue_fail.json', `'${JSON.stringify(result)}'`)
         }))
         if (players_values.length === 0) {
             return;
@@ -151,7 +146,7 @@ class walletTransfer_update {
             util.save('./export/bashInsertWallet_errLog.json', err)
             if (players_values.length <= 1) {
                 this.failAndNoNeedreTry++
-                util.save('./export/failAndNoNeedreTry/bashInsertWallet_failToInsert.json', err + '--------,' +  JSON.stringify(players_values) + ',' + JSON.stringify(player_info_values));
+                util.save('./export/failAndNoNeedreTry/bashInsertWallet_failToInsert.json', err + ' ------  ' +  JSON.stringify(players_values) + ',' + JSON.stringify(player_info_values));
                 return;
             }
             const cutHalf = Math.round(players_values.length / 2);

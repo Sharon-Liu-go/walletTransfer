@@ -54,10 +54,10 @@ class walletTransfer_preset {
         return
     }
 
-
     scan() {     
         return new Promise((resolve, reject) => {
-           console.time('EXEC') 
+            console.time('EXEC') 
+            console.time('redisScan')
             this.stream = this.redis.scanStream({
                 match: this.pattern,
                 count: this.size,
@@ -74,8 +74,9 @@ class walletTransfer_preset {
             });
             this.stream.on("end", () => {
                 util.log("All keys have been visited!!!")
-                util.save('./export/walletTransfer_log.json', '-------redis total----------' + '\n' + this.redisScaned + '\n' + '-----------------' + '\n');
+                util.save('./export/walletTransfer_log.json', `redis Scaned : ${this.redisScaned},成功insert wallet 總筆數: ${this.affectedRows}, 資料有誤總筆數:${this.failAndNoNeedreTry}, insertDuplicates:${this.insertDuplicates}`);
                 this.finishRedisScan = true;
+                console.timeEnd('redisScan')
             });
        });
     }
@@ -91,22 +92,22 @@ class walletTransfer_preset {
             if (result.status === 'fulfilled') {
                 if (!result.value.v.platformId || !result.value.v.accountId || isNaN(result.value.v.gold)) {//gold若是空字串則視為0
                 this.failAndNoNeedreTry++
-                util.save('./export/batchHgetAllValue_invalidVal.csv', '[no platformId、accountId、gold or gold is NaN]: ' + JSON.stringify(result) )
+                util.save('./export/failAndNoNeedreTry/batchHgetAllValue_invalidVal.csv', `"[no platformId、accountId、gold or gold is NaN]" : '${JSON.stringify(result)}'` )
                 return;
                 }
                 if (result.value.v.accountId.length > 190) {
                     this.failAndNoNeedreTry++
-                    util.save('./export/batchHgetAllValue_invalidVal.csv', '[account too log]: ' + JSON.stringify(result) )
+                    util.save('./export/failAndNoNeedreTry/batchHgetAllValue_invalidVal.csv', `"[account too log]" : '${JSON.stringify(result)}'`)
                     return;
                 }
                 if (this.uniqueAccount.has(result.value.v.accountId.toLowerCase().trim())) {
                     this.failAndNoNeedreTry++
-                    util.save('./export/batchHgetAllValue_account_repeat.json', '[accountId大小寫重複]: ' + result.value.v.accountId + ' , ' + JSON.stringify(result) )
+                    util.save('./export/failAndNoNeedreTry/batchHgetAllValue_account_repeat.json', `"[accountId大小寫重複]" : "${result.value.v.accountId}" : '${JSON.stringify(result)}'`)
                     return;
                 }
                 if (!this.agentMoneyType[result.value.v.platformId]) {
                     this.failAndNoNeedreTry++
-                    util.save('./export/batchHgetAllValue_invalidVal.csv', '[no agent in agentMoneyTypeMapping]: ' + JSON.stringify(result) )
+                    util.save('./export/failAndNoNeedreTry/batchHgetAllValue_invalidVal.csv', `"[no agent in agentMoneyTypeMapping]": '${JSON.stringify(result)}'` )
                     return;
                 }
                 const goldInRedis = parseFloat(result.value.v.gold);
@@ -116,7 +117,7 @@ class walletTransfer_preset {
                 return;
                 }
             this.failAndNoNeedreTry++
-            util.save('./export/batchHgetAllValue_fail.json', JSON.stringify(result))
+            util.save('./export/failAndNoNeedreTry/batchHgetAllValue_fail.json', `'${JSON.stringify(result)}'`)
         }))
         if (players_values.length === 0) {
             return;
@@ -137,16 +138,12 @@ class walletTransfer_preset {
                  util.save('./export/warningStatus.json', JSON.stringify(players_values))
             }
 
-            console.log('*****************')
-            console.log(`redis 總rid數: ${this.redisScaned} , 成功insert wallet 總筆數: ${this.affectedRows}, 資料有誤總筆數:${this.failAndNoNeedreTry}, insertDuplicates:${this.insertDuplicates}`)
-            console.log('uniqueAccount set:', this.uniqueAccount.size)
+            console.log(`redisScaned: ${this.redisScaned} , 成功insert總筆數: ${this.affectedRows}, 資料有誤總筆數:${this.failAndNoNeedreTry}, insertDuplicates:${this.insertDuplicates}`)
+            console.log(`uniqueAccount set:', ${this.uniqueAccount.size}`)
 
             if (this.finishRedisScan && (this.redisScaned === (this.affectedRows + this.failAndNoNeedreTry + this.insertDuplicates))) {
                 console.log('執行完畢,故終止程式!')
-                //console.log(this.uniqueAccount.size)
-                //util.save('./export/uniqueAccount.json', JSON.stringify([...this.uniqueAccount]))
                 const memoryUsage = process.memoryUsage();
-                //const usedMemoryInMB = memoryUsage.heapUsed / 1024 / 1024;
                 console.log('usedMemoryInMB', memoryUsage);
                 console.timeEnd('EXEC')
                 process.exit(); 
@@ -156,10 +153,10 @@ class walletTransfer_preset {
             util.save('./export/bashInsertWallet_errLog.json', err)
             if (players_values.length <= 1) {
                 this.failAndNoNeedreTry++
-                util.save('./export/bashInsertWallet_failToInsert.json', err + '--------,' +  JSON.stringify(players_values) + ',' + JSON.stringify(player_info_values));
+                util.save('./export/failAndNoNeedreTry/bashInsertWallet_failToInsert.json', err + ' ------  ' +  JSON.stringify(players_values) + ',' + JSON.stringify(player_info_values));
                 if (this.finishRedisScan && (this.redisScaned === (this.affectedRows + this.failAndNoNeedreTry + this.insertDuplicates))) {
-                    console.log(`redis 總rid數: ${this.redisScaned} , 成功insert wallet 總筆數: ${this.affectedRows}, 資料有誤總筆數:${this.failAndNoNeedreTry}, insertDuplicates:${this.insertDuplicates} 執行完畢,故終止程式!`)
-                    console.log('儲存uniqueAccount set:', this.uniqueAccount.size)
+                    console.log(`redis scaned: ${this.redisScaned} , 成功insert wallet 總筆數: ${this.affectedRows}, 資料有誤總筆數:${this.failAndNoNeedreTry}, insertDuplicates:${this.insertDuplicates} 執行完畢,故終止程式!`)
+                    console.log('uniqueAccount set:', this.uniqueAccount.size)
                     console.timeEnd('EXEC')
                     process.exit(); 
                 }
@@ -185,7 +182,6 @@ class walletTransfer_preset {
         await this.getAllAgentMoneyType();
         console.timeEnd('Get All Agent Moenytype Mapping') 
         
-            
         await this.scan();
 
         } catch (err) {
