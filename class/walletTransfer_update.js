@@ -139,7 +139,7 @@ class walletTransfer_update {
             const result = await Promise.all([await this.mysqlConn.query(sql_player, [players_values]), await this.mysqlConn.query(sql_playerInfo, [player_info_values])])
             this.insertDuplicates += result[0][0].warningStatus;
             if (result[0][0].warningStatus) {
-                 util.save('./export/warningStatus.json', JSON.stringify(players_values))
+                 util.save('./export/warningStatus.json', JSON.stringify(player_info_values))
             }
             return;
         } catch (err) {

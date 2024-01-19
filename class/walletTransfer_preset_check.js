@@ -9,10 +9,10 @@ const config = {
 
 
 const fs = require('fs');
+const readline = require('readline');
 
 class walletTransfer_preset_check {
-    constructor(dirname) {
-        this.dirname = dirname;
+    constructor() {
         this.mysqlConn;
         // for report
         this.totallySameAccount = new Set() //不重複的相同大小帳號
@@ -23,6 +23,7 @@ class walletTransfer_preset_check {
     }
 
     async conn() {
+        console.log('Mysql連線Config: ', config.mysql)
         this.mysqlConn = await mysql.createConnection(config.mysql)
         return this.mysqlConn;
     }
@@ -35,38 +36,52 @@ class walletTransfer_preset_check {
     async exec() {
         try {
             util.log('exec')
-            //const inputFilePath =  this.dirname   +  process.env.WALLET_CHECK_REPEATED_ACCOUNTS_SOURCE_PATH ;
-            //const outputFilePath =  this.dirname    + process.env.WALLET_CHECK_REPEATED_ACCOUNTS_OUTPUT_PATH;
+            const inputFilePath =  process.env.WALLET_CHECK_REPEATED_ACCOUNTS_SOURCE_PATH ;
+            const outputFilePath = process.env.WALLET_CHECK_REPEATED_ACCOUNTS_OUTPUT_PATH;
 
-
-
-            // console.log('inputFilePath', inputFilePath)
-            // console.log('outputFilePath', outputFilePath)
+            console.log('inputFilePath: ', inputFilePath)
+            console.log('outputFilePath: ', outputFilePath)
 
             //建立output 的資料夾
-            // const outputFolder = process.env.WALLET_CHECK_REPEATED_ACCOUNTS_OUTPUT_PATH.split('/')[0]
-            // fs.mkdirSync(outputFolder)
+            const outputFolder = process.env.WALLET_CHECK_REPEATED_ACCOUNTS_OUTPUT_PATH.split('/')[1]
+            if (!fs.existsSync('./' + process.env.WALLET_CHECK_REPEATED_ACCOUNTS_OUTPUT_PATH.split('/')[1])) {
+                fs.mkdirSync(outputFolder)
+            }
+
+            if (fs.existsSync(outputFilePath)) {
+              // 刪除檔案
+              fs.unlink(outputFilePath, (err) => {
+                if (err) {
+                  console.error(`刪除檔案時發生錯誤: ${err}`);
+                } else {
+                  console.log('檔案已成功刪除。');
+                }
+              });
+            }
+
+            const outputStream = fs.createWriteStream(outputFilePath);
 
             // 创建逐行读取的接口
-            const rl = fs.createReadStream('./export/batchHgetAllValue_account_repeat.txt');
+            const fileStream  = fs.createReadStream(inputFilePath);
             // 設置編碼爲 utf8。
-            rl.setEncoding("UTF8");
-            console.log('OK')
+            const rl = readline.createInterface({
+              input: fileStream,
+              crlfDelay: Infinity,
+            })
+            console.log('--------開始處理未儲存DB的大小寫重複帳號資料------------')
             // 处理每一行的逻辑
-            rl.on('data', (line) => {
-                console.log(line)
+            rl.on('line', (line) => {
                 const lineArray = line.split('----')
-                console.log(lineArray)
                 const obj = {};
                 obj.reason = lineArray[0]
                 obj.account = lineArray[1];
                 const ridAndPayload = JSON.parse(lineArray[2]).value
-                console.log("content", ridAndPayload)
 
                 if (this.allAccounts[obj.account]) { //若已存在代表完全一樣的account
+                    console.log('完全一樣的帳號:', obj.account)
                     this.totallySameAccount.add(obj.account);
-                    obj.rid_preSet_noInsert.push(ridAndPayload)
-                    obj.hasTotallySameAccount++
+                    this.allAccounts[obj.account].rid_preSet_noInsert.push(ridAndPayload)
+                    this.allAccounts[obj.account].hasTotallySameAccount++
                     return;
                 }
 
@@ -81,9 +96,8 @@ class walletTransfer_preset_check {
                 obj.rid_updateDate_noInsert = []
                 obj.rid_updateDate_Insert = []
                 obj.hasTotallySameAccount = 1
-                console.log(obj)
+                //console.log(obj)
                 this.allAccounts[obj.account] = obj;
-                console.log(this.allAccounts)
             })
 
             rl.on('error', function (e) {
@@ -91,22 +105,23 @@ class walletTransfer_preset_check {
             });
 
             // 在文件读取结束时关闭可写流
-            rl.on('end', async () => {
+            rl.on('close', async () => {
+                console.log('--------開始處理已儲存DB的大小寫重複帳號資料------------')
                 //取得提前已insert的accounts
                 const allNoInsertAccounts = Object.keys(this.allAccounts)
                 await this.conn();
-                const accountsInserted = await this.mysqlConn.query('SELECT * wallet.players where name in (?)', allNoInsertAccounts);
-
+                const [accountsInserted] = await this.mysqlConn.query('SELECT * FROM wallet.player_info where account in (?)', [allNoInsertAccounts]);
+                console.log('已存在DB的大小寫重複帳號: 共',accountsInserted.length + ' 筆')
                 accountsInserted.forEach(e => {
                     const obj = {};
-                    obj.reason = lineArray[0]
-                    obj.account = lineArray[1];
-                    const ridAndPayload = JSON.parse(lineArray[2]).value;
+                    obj.reason = '已存在DB的大小寫重複帳號'
+                    obj.account = e.account;
+                    const ridAndPayload = {rid:e.rid, v: JSON.parse(e.payload)};
 
                     if (this.allAccounts[obj.account]) { //若已存在代表完全一樣的account
                         this.totallySameAccount.add(obj.account);
-                        obj.rid_preSet_Insert.push(ridAndPayload)
-                        obj.hasTotallySameAccount++
+                        this.allAccounts[obj.account].rid_preSet_Insert.push(ridAndPayload)
+                        this.allAccounts[obj.account].hasTotallySameAccount++
                         return;
                     }
 
@@ -125,17 +140,22 @@ class walletTransfer_preset_check {
                     this.allAccounts[obj.account] = obj;
                 })
 
-                const outputStream = fs.createWriteStream(outputFilePath);
-
                 const hasTotallySameAccount = [...this.totallySameAccount]
+                console.log(hasTotallySameAccount)
                 hasTotallySameAccount.forEach(e => {
-                    console.log(`帳號:${e.account} 有${e.hasTotallySameAccount}個完全一樣的帳號 \n`)
-                    let text = `帳號:${e.account} 有${e.hasTotallySameAccount}個完全一樣的帳號 \n
-                    提前_未insert DB : ${e.rid_preSet_Insert}\n
-                    提前_insert DB : ${e.rid_preSet_Insert}\n                `
+                    console.log(`帳號:${e} 有${this.allAccounts[e].hasTotallySameAccount}個rid有完全一樣的帳號 \n`)
+                    let text = `帳號:${e} 有${this.allAccounts[e].hasTotallySameAccount}個rid有完全一樣的帳號 \n
+                    提前_未insert DB : ${JSON.stringify(this.allAccounts[e].rid_preSet_noInsert)}\n
+                    提前_insert DB : ${JSON.stringify(this.allAccounts[e].rid_preSet_Insert)}\n                `
                     outputStream.write(text + '\n');
                 })
-                console.log(`以上共有${hasTotallySameAccount.length}組玩家帳號有完全一樣的帳號，請至${outputFilePath}查看其details，確認要用哪一個rid作為正確的insert wallet 資訊! \n`)
+
+                let resultText = `以上共有${hasTotallySameAccount.length}組玩家帳號有完全一樣的帳號`
+                if (hasTotallySameAccount.length > 0) {
+                    resultText += `，請至${outputFilePath}查看其details，確認要用哪一個rid作為正確的insert wallet 資訊! \n`
+                }
+                console.log(resultText)
+                outputStream.write(resultText + '\n');
                 outputStream.end();
                 console.log('文件处理完成，结果写入', outputFilePath);
             });
