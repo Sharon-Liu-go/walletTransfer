@@ -95,22 +95,22 @@ class walletTransfer_update {
 
                     if (!result.value.v.platformId || !result.value.v.accountId || isNaN(result.value.v.gold)) {//gold若是空字串則視為0
                     this.failAndNoNeedreTry++
-                    util.save('./export/failAndNoNeedreTry/batchHgetAllValue_invalidVal.csv', `"[no platformId、accountId、gold or gold is NaN]" : '${JSON.stringify(result)}'` )
+                    util.save('./export/failAndNoNeedreTry/batchHgetAllValue_invalidVal.csv', `[no platformId、accountId、gold or gold is NaN]:${JSON.stringify(result)}` )
                     return;
                 }
                 if (result.value.v.accountId.length > 190) {
                     this.failAndNoNeedreTry++
-                    util.save('./export/failAndNoNeedreTry/batchHgetAllValue_invalidVal.csv', `"[account too log]" : '${JSON.stringify(result)}'`)
+                    util.save('./export/failAndNoNeedreTry/batchHgetAllValue_invalidVal.csv', `[account too log]:${JSON.stringify(result)}`)
                     return;
                 }
                 if (this.uniqueAccount.has(result.value.v.accountId.toLowerCase().trim())) {
                     this.failAndNoNeedreTry++
-                    util.save('./export/failAndNoNeedreTry/batchHgetAllValue_account_repeat.json', `"[accountId大小寫重複]" : "${result.value.v.accountId}" : '${JSON.stringify(result)}'`)
+                    util.save('./export/failAndNoNeedreTry/batchHgetAllValue_account_repeat.json', `[accountId大小寫重複]----${result.value.v.accountId}----${JSON.stringify(result)}`)
                     return;
                 }
                 if (!this.agentMoneyType[result.value.v.platformId]) {
                     this.failAndNoNeedreTry++
-                    util.save('./export/failAndNoNeedreTry/batchHgetAllValue_invalidVal.csv', `"[no agent in agentMoneyTypeMapping]": '${JSON.stringify(result)}'`);
+                    util.save('./export/failAndNoNeedreTry/batchHgetAllValue_invalidVal.csv', `[no agent in agentMoneyTypeMapping]:${JSON.stringify(result)}`);
                     return;
                 }
                 const goldInRedis = parseFloat(result.value.v.gold);
@@ -122,7 +122,7 @@ class walletTransfer_update {
                 return;
             }
             this.failAndNoNeedreTry++
-            util.save('./export/failAndNoNeedreTry/batchHgetAllValue_fail.json', `'${JSON.stringify(result)}'`)
+            util.save('./export/failAndNoNeedreTry/batchHgetAllValue_fail.json', `${JSON.stringify(result)}`)
         }))
         if (players_values.length === 0) {
             return;
@@ -139,7 +139,7 @@ class walletTransfer_update {
             const result = await Promise.all([await this.mysqlConn.query(sql_player, [players_values]), await this.mysqlConn.query(sql_playerInfo, [player_info_values])])
             this.insertDuplicates += result[0][0].warningStatus;
             if (result[0][0].warningStatus) {
-                 util.save('./export/warningStatus.json', JSON.stringify(player_info_values))
+                util.save('./export/warningStatus.json', JSON.stringify(player_info_values))
             }
             return;
         } catch (err) {

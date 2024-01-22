@@ -143,8 +143,6 @@ class walletTransfer_preset {
 
             if (this.finishRedisScan && (this.redisScaned === (this.affectedRows + this.failAndNoNeedreTry + this.insertDuplicates))) {
                 console.log('執行完畢,故終止程式!')
-                const memoryUsage = process.memoryUsage();
-                console.log('usedMemoryInMB', memoryUsage);
                 console.timeEnd('EXEC')
                 process.exit(); 
             }
