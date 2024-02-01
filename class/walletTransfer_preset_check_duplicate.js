@@ -15,9 +15,11 @@ class walletTransfer_preset_check_duplicate {
     constructor() {
         this.mysqlConn;
         // for report
-        this.totallySameAccount = 0 //相同帳號但pid不同
-        this.similarAccount = 0 //大小寫帳號
-        this.weildAccount = 0 //在code中不同，但DB視為相同。
+        this.readTimes = 0 //讀取次數
+        this.repeatAccountCounts = 0 //在code中不同，但DB視為相同。
+        this.shouldInDBbutNot = 0 //奇怪，DB沒有該類似帳號，但該帳號卻沒有儲存在DB裡    
+        this.outputStream_repeat;
+        this.outputStream_shouldInDBbutNot;
     }
 
     async conn() {
@@ -25,6 +27,44 @@ class walletTransfer_preset_check_duplicate {
         return this.mysqlConn;
     }
 
+    async removeFileIfExist(filePath) {
+        if (fs.existsSync(filePath)) {
+            console.log(`檔案${filePath}已存在，進行刪除`);
+            fs.unlinkSync(filePath);
+            console.log(`檔案${filePath}已成功刪除`);
+        }
+    }
+
+    async examData(data,batchNo) {
+        console.log(`此第${batchNo}批有${data.length}`);  
+        let repeatAccountCounts = 0 //在code中不同，但DB視為相同。
+        let shouldInDBbutNot = 0 //奇怪，DB沒有該類似帳號，但該帳號卻沒有儲存在DB裡
+
+        for (let i = 0; i < data.length; i++){
+            let account = data[i][0];
+            let rid = data[i][2]
+            let payload = JSON.parse(data[i][3])
+            const [players] = await this.mysqlConn.query('SELECT * FROM wallet.player_info where account =?', [data[i][0]]);
+            if (players.length > 0) {
+                if (account === players[0].account) {
+                    if (rid === players[0].rid) {  //帳號和rid完全一樣。
+                        continue;
+                    }
+                }
+                this.repeatAccountCounts++
+                repeatAccountCounts++
+                this.outputStream_repeat.write(`[duplicate分析-未儲存在DB之大小寫帳號]----${account}----${JSON.stringify({ value: { rid, v: payload } })}\n`);
+                continue;
+            }
+            this.shouldInDBbutNot++
+            shouldInDBbutNot++
+            this.outputStream_shouldInDBbutNot.write(`[DB無該類似帳號但卻沒存在DB]----${account}----${JSON.stringify({ value: { rid, v: payload } })}\n`);
+            continue;          
+        }
+        console.log(`此第${[batchNo]}批造成insert duplicate的帳號:${repeatAccountCounts + shouldInDBbutNot} : 在DB會被視為同一個帳號:${repeatAccountCounts} + 應存在DB但沒有的${shouldInDBbutNot}筆`)
+        return;
+    };
+    
     /**
      * TODO: 共用
      */
@@ -33,31 +73,32 @@ class walletTransfer_preset_check_duplicate {
     async exec() {
         try {
             util.log('exec')
+            console.time('EXEC')
             const inputFilePath = process.env.WALLET_CHECK_DUPLICATE_ACCOUNTS_SOURCE_PATH;
-            const outputFilePath = process.env.WALLET_CHECK_DUPLICATE_ACCOUNTS_OUTPUT_PATH;
+            const outputFilePath_repeat = process.env.WALLET_CHECK_DUPLICATE_ACCOUNTS_OUTPUT_PATH;
+            const outputFilePath_shouldInDBbutNot = process.env.WALLET_CHECK_SHOULD_EXIST_ACCOUNTS_OUTPUT_PATH;
 
             console.log('inputFilePath: ', inputFilePath)
-            console.log('outputFilePath: ', outputFilePath)
+            console.log('outputFilePath_repeat: ', outputFilePath_repeat)
+            console.log('outputFilePath_shouldInDBbutNot: ', outputFilePath_shouldInDBbutNot)
+
+            //確認input檔案是否存在
+            if (!fs.existsSync(process.env.WALLET_CHECK_DUPLICATE_ACCOUNTS_SOURCE_PATH)) {
+                console.log(`檢驗資料檔案不存在:${process.env.WALLET_CHECK_DUPLICATE_ACCOUNTS_SOURCE_PATH}，請確認是沒有該檔案錯誤，還是.env提供的位置有誤`)
+            }
 
             //建立output 的資料夾
-            const outputFolder = process.env.WALLET_CHECK_DUPLICATE_ACCOUNTS_OUTPUT_PATH.split('/')[1]
-            if (!fs.existsSync('./' + process.env.WALLET_CHECK_DUPLICATE_ACCOUNTS_OUTPUT_PATH.split('/')[1])) {
-                fs.mkdirSync(outputFolder)
+            const output = process.env.WALLET_CHECK_WEILD_ACCOUNTS_OUTPUT_PATH.split('/')
+            const outputFolderPath = './' + output[1] + '/' + output[2];
+            console.log('outputFolderPath:',outputFolderPath)
+            if (!fs.existsSync(outputFolderPath)) {
+                fs.mkdirSync(outputFolderPath)
             }
-
-            if (fs.existsSync(outputFilePath)) {
-                // 刪除檔案
-                console.log('輸出檔案已存在，進行刪除');
-                fs.unlink(outputFilePath, (err) => {
-                    if (err) {
-                        console.error(`刪除檔案時發生錯誤: ${err}`);
-                    } else {
-                        console.log('檔案已成功刪除。');
-                    }
-                });
-            }
-
-            const outputStream = fs.createWriteStream(outputFilePath);
+            await this.removeFileIfExist(outputFilePath_repeat)
+            await this.removeFileIfExist(outputFilePath_shouldInDBbutNot)
+           
+            this.outputStream_repeat = fs.createWriteStream(outputFilePath_repeat);
+            this.outputStream_shouldInDBbutNot = fs.createWriteStream(outputFilePath_shouldInDBbutNot);
 
             // 创建逐行读取的接口
             const fileStream = fs.createReadStream(inputFilePath);
@@ -68,61 +109,37 @@ class walletTransfer_preset_check_duplicate {
             })
             console.log('Mysql連線Config: ', config.mysql)
             console.log('--------------------')
+            
+            await this.conn();
+            const promises = [];
+
             // 处理每一行的逻辑
             rl.on('line', async (line) => {
-                const data = JSON.parse(line)
-                console.log(`此批有${data.length}`)
-                const accountAndRidMapping = {}
-                const lowercaseAccounts = []
-                const accounts = data.map(e => {
-                    accountAndRidMapping[e[0]] = e
-                    lowercaseAccounts.push(e[0].toLowerCase().trim())
-                    return e[0]
-                })
-
-                await this.conn();
-                const [players] = await this.mysqlConn.query('SELECT * FROM wallet.player_info where account in (?)', [accounts]);
-
-                console.log(`此批從DB撈出有${players.length}`)
-
-                const toTallySameAccountInDB = [];
-                const similarAccount = [];
-                const weildAccountInDB = [];
-
-                players.forEach(e => {
-                    const index = accounts.indexOf(e.account);
-                    if (index != -1 && e.rid == accountAndRidMapping[e.account][2]) { //account和pid都完全相同
-                        delete accountAndRidMapping[e.account]
-                    } else if (index != -1) { //account相同但pid不相同 => 若有,需特別列出，因要確認同個帳號應該要用哪個pid才正確
-                        let obj = {}
-                        obj[e.account] = JSON.stringify(e);
-                        toTallySameAccountInDB.push(obj)
-                        this.totallySameAccount = 0 //相同帳號但rid不同
-                    } else if (lowercaseAccounts.includes(e.account.toLowerCase().trim())) { //account 與 DB的大小寫不同
-                        similarAccount.push(accountAndRidMapping[e.account][0])
-                        this.similarAccount++
-                    } else {
-                        weildAccountInDB.push(e.account);
-                        this.weildAccount++ //在code中不同，但DB視為相同。
-                    }
-                })
-
-                outputStream.write(JSON.stringify(accountAndRidMapping) + '\n');
-                outputStream.write(`帳號完全一樣但rid不同有${this.totallySameAccount}筆: 請確認該帳號要以哪一個rid作為正確的insert wallet 資訊!\n` + JSON.stringify(toTallySameAccountInDB) + '\n');
-                outputStream.write(`大小寫帳號有${this.similarAccount}筆:\n` + JSON.stringify(similarAccount) + '\n');
-                outputStream.write(`詭異帳號有${this.weildAccount}筆\n`+ '在DB的帳號:' + JSON.stringify(weildAccountInDB) + '\n');
-                outputStream.write(`此批Insert時造成duplicate的帳號有:`+ Object.keys(accountAndRidMapping).length + '筆' + `其中帳號完全一樣但rid不同有${this.totallySameAccount}筆、大小寫帳號有${this.similarAccount}、詭異帳號有${this.weildAccount}筆\n` + '--------------------------------\n');
-                console.log(`檢查結果: 截至目前Insert時造成duplicate的帳號共有${this.totallySameAccount + this.similarAccount + this.weildAccount}個， 其中帳號完全一樣但rid不同有${this.totallySameAccount}筆、大小寫帳號有${this.similarAccount}、詭異帳號有${this.weildAccount}，詳細結果寫入`, outputFilePath);
+                this.readTimes++
+                const data = JSON.parse(line); 
+                let batchNo = this.readTimes;
+                promises.push(this.examData(data,batchNo))
             })
-
+        
             rl.on('error', function (e) {
-                console.log(e)
+                console.error(e)
             });
 
             // 在文件读取结束时关闭可写流
             rl.on('close', async () => {
-                console.log(`掃描warningStatus檔案完畢`);
+                console.log(`掃描warningStatus檔案完畢,讀取次數:${this.readTimes}`); 
+                Promise.all(promises).then((r) => {
+                    console.log(`掃描warningStatus檔案總次數:${this.readTimes}`);
+                    console.log('所有非同步操作已完成。');
+                    console.log(`累積造成insert duplicate的帳號:${this.repeatAccountCounts + this.shouldInDBbutNot} :  在DB會被視為同一個帳號:${this.repeatAccountCounts} + 應存在DB但沒有的${this.shouldInDBbutNot}筆`)
+                    if (this.shouldInDBbutNot > 0) {
+                        console.log(`請至${outputFilePath_shouldInDBbutNot}查看這些應存在DB但沒存到，可將這些rid重新insert至DB`)
+                    }
+                    console.timeEnd('EXEC')
+                });   
             });
+
+ 
 
         } catch (err) {
             console.error(err)

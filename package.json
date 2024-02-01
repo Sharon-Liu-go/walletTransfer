@@ -7,7 +7,8 @@
         "test": "echo \"Error: no test specified\" && exit 1",
         "start": "node main.js",
         "pm2": "pm2 start main.js",
-        "wallet": "node wallet.js"
+        "wallet": "node wallet_checkAccountRepeat.js",
+        "wallet_warning": "node wallet_checkWarningStatus.js"
     },
     "keywords": [],
     "author": "",
