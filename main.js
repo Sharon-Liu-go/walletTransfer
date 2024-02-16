@@ -9,7 +9,8 @@ const Currency = require('./class/Currency');
 //const findLackPlayers = require('./class/findLackPlayers');
 const walletTransfer_preset = require('./class/walletTransfer_preset');
 const walletTransfer_update = require('./class/walletTransfer_update');
-const walletTransfer_preset_check = require('./class/walletTransfer_preset_check');
+const walletTransfer_check = require('./class/walletTransfer_check');
+const walletTransfer_preset_check_duplicate = require('./class/walletTransfer_preset_check_duplicate');
 
 const util = require('./util');
 
@@ -103,8 +104,13 @@ const menu = [
 		reply: ''
 	},
 	{
-		msg: 'wallet transfer preset check',
-		entity: new walletTransfer_preset_check(__dirname),
+		msg: 'wallet transfer warningStatus analysis',
+		entity: new walletTransfer_preset_check_duplicate(),
+		reply: ''
+	},
+	{
+		msg: 'wallet transfer check',
+		entity: new walletTransfer_check(),
 		reply: ''
 	},
 ]

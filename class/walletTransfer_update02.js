@@ -38,9 +38,6 @@ class walletTransfer_update {
         this.insertDuplicates = 0
         this.updatePlayer = 0
         this.updateTime = 0
-        this.players_values = [];
-        this.player_info_values = [];
-        this.insertBatchSize = 1000;
     }
 
 
@@ -83,37 +80,19 @@ class walletTransfer_update {
                 count: this.size,
             });
 
-            this.stream.on("data", async (key) => {    
-                this.flag = key;
+            this.stream.on("data", async (key) => {               
                 this.stream.pause();
                 this.redisScaned += key.length;
                 console.time('batch')
                 console.log('scan data ',  key.length)
                 await this.batchHgetAllValue(key)
-                this.flag = 0;
-                if (this.players_values.length >= this.insertBatchSize) {
-                    this.flag = 1;
-                    const players_values = this.players_values.splice(0,this.insertBatchSize);
-                    const player_info_values = this.player_info_values.splice(0,this.insertBatchSize); 
-                    await this.bashInsertWallet(players_values, player_info_values);
-                    console.log(`redis Scaned : ${this.redisScaned},update Player: ${this.updatePlayer},資料有錯:${this.failAndNoNeedreTry},warning status: ${this.insertDuplicates}`)
-                }               
+                console.log(`redis Scaned : ${this.redisScaned},update Player: ${this.updatePlayer},資料有錯:${this.failAndNoNeedreTry},warning status: ${this.insertDuplicates}`)
                 console.timeEnd('batch')
-                this.flag = 0;
                 this.stream.resume();
             });
-            this.stream.on("end", async () => {
+            this.stream.on("end", () => {
                 util.log("All keys have been visited!!!")
-                while (this.flag > 0) {
-                    util.log('等待batchHgetAllValue或bashInsertWallet動作結束中...')
-                }
-                while (this.players_values.length > 0) {
-                    const players_values = this.players_values.splice(0,this.insertBatchSize);
-                    const player_info_values = this.player_info_values.splice(0,this.insertBatchSize); 
-                    await this.bashInsertWallet(players_values, player_info_values);
-                }
-                console.log('./export_update/walletTransfer_log.json', `redis Scaned : ${this.redisScaned},update Player: ${this.updatePlayer},資料有錯:${this.failAndNoNeedreTry},warning status: ${this.insertDuplicates}`);
-                util.save(`redis Scaned : ${this.redisScaned},update Player: ${this.updatePlayer},資料有錯:${this.failAndNoNeedreTry},warning status: ${this.insertDuplicates}`);
+                util.save('./export_update/walletTransfer_log.json', `redis Scaned : ${this.redisScaned},update Player: ${this.updatePlayer},資料有錯:${this.failAndNoNeedreTry},warning status: ${this.insertDuplicates}`);
                 console.timeEnd('redisScan')
             });
        });
@@ -124,8 +103,8 @@ class walletTransfer_update {
             const result = await this.redis.hgetall(key);
             return { rid : key.split(':')[1] , v : result }; 
         }))
-        //const players_values = [];
-        //const player_info_values = [];
+        const players_values = [];
+        const player_info_values = [];
         await Promise.allSettled(results.map(async (result) => {
             if (result.status === 'fulfilled') {
                 if (result.value.v.updateTime >= this.updateTime) {
@@ -152,8 +131,8 @@ class walletTransfer_update {
                     return;
                 }
                 const goldInRedis = parseFloat(result.value.v.gold);
-                this.players_values.push([result.value.v.accountId, this.agentMoneyType[result.value.v.platformId].currency, Math.floor(goldInRedis/this.agentMoneyType[result.value.v.platformId].exchangeRate,0)]);
-                this.player_info_values.push([result.value.v.accountId, parseInt(result.value.v.platformId), parseInt(result.value.rid), JSON.stringify(result.value.v)])    
+                players_values.push([result.value.v.accountId, this.agentMoneyType[result.value.v.platformId].currency, Math.floor(goldInRedis/this.agentMoneyType[result.value.v.platformId].exchangeRate,0)]);
+                player_info_values.push([result.value.v.accountId, parseInt(result.value.v.platformId), parseInt(result.value.rid), JSON.stringify(result.value.v)])    
                 this.uniqueAccount.add(result.value.v.accountId.toLowerCase().trim())
                 return;
                 }
@@ -162,10 +141,10 @@ class walletTransfer_update {
             this.failAndNoNeedreTry++
             util.save('./export_update/failAndNoNeedreTry/batchHgetAllValue_fail.json', `${JSON.stringify(result)}`)
         }))
-        // if (players_values.length === 0) {
-        //     return;
-        // }
-        // await this.bashInsertWallet(players_values, player_info_values);
+        if (players_values.length === 0) {
+            return;
+        }
+        await this.bashInsertWallet(players_values, player_info_values);
         return;
     }
 

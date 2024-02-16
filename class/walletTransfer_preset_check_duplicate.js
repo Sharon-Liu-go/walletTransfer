@@ -74,31 +74,42 @@ class walletTransfer_preset_check_duplicate {
         try {
             util.log('exec')
             console.time('EXEC')
-            const inputFilePath = process.env.WALLET_CHECK_DUPLICATE_ACCOUNTS_SOURCE_PATH;
-            const outputFilePath_repeat = process.env.WALLET_CHECK_DUPLICATE_ACCOUNTS_OUTPUT_PATH;
-            const outputFilePath_shouldInDBbutNot = process.env.WALLET_CHECK_SHOULD_EXIST_ACCOUNTS_OUTPUT_PATH;
+
+            let folderPath = process.env.WALLET_CHECK_EXPORT_PRE_FOLDER
+            if (process.env.ACTION === 'UPDATE') {
+                folderPath = process.env.WALLET_CHECK_EXPORT_UPDATE_FOLDER
+            }         
+            const outputFolderPath = folderPath + process.env.WALLET_CHECK_EXPORT_SUBFOLDER_warningStatusAnylasis;
+
+            const inputFilePath = folderPath + process.env.WALLET_CHECK_DUPLICATE_ACCOUNTS_SOURCE_PATH;
+            const outputFilePath_repeat = outputFolderPath +  process.env.WALLET_CHECK_DUPLICATE_ACCOUNTS_OUTPUT_PATH;
+            const outputFilePath_shouldInDBbutNot = outputFolderPath + process.env.WALLET_CHECK_SHOULD_EXIST_ACCOUNTS_OUTPUT_PATH;
 
             console.log('inputFilePath: ', inputFilePath)
             console.log('outputFilePath_repeat: ', outputFilePath_repeat)
             console.log('outputFilePath_shouldInDBbutNot: ', outputFilePath_shouldInDBbutNot)
 
             //確認input檔案是否存在
-            if (!fs.existsSync(process.env.WALLET_CHECK_DUPLICATE_ACCOUNTS_SOURCE_PATH)) {
-                console.log(`檢驗資料檔案不存在:${process.env.WALLET_CHECK_DUPLICATE_ACCOUNTS_SOURCE_PATH}，請確認是沒有該檔案錯誤，還是.env提供的位置有誤`)
+            if (!fs.existsSync(inputFilePath)) {
+                console.log(`檢驗資料檔案不存在:${inputFilePath}，請確認是沒有該檔案, 還是.env提供的位置有誤`)
+                return;
             }
 
-            //建立output 的資料夾
-            const output = process.env.WALLET_CHECK_WEILD_ACCOUNTS_OUTPUT_PATH.split('/')
-            const outputFolderPath = './' + output[1] + '/' + output[2];
+            //建立output 
             console.log('outputFolderPath:',outputFolderPath)
             if (!fs.existsSync(outputFolderPath)) {
                 fs.mkdirSync(outputFolderPath)
             }
             await this.removeFileIfExist(outputFilePath_repeat)
             await this.removeFileIfExist(outputFilePath_shouldInDBbutNot)
+            
+            await this.conn();
+            console.log('Mysql連線Config: ', config.mysql)
            
             this.outputStream_repeat = fs.createWriteStream(outputFilePath_repeat);
             this.outputStream_shouldInDBbutNot = fs.createWriteStream(outputFilePath_shouldInDBbutNot);
+
+            console.log('--------開始讀取------------')
 
             // 创建逐行读取的接口
             const fileStream = fs.createReadStream(inputFilePath);
@@ -107,14 +118,10 @@ class walletTransfer_preset_check_duplicate {
                 input: fileStream,
                 crlfDelay: Infinity,
             })
-            console.log('Mysql連線Config: ', config.mysql)
-            console.log('--------------------')
-            
-            await this.conn();
             const promises = [];
 
             // 处理每一行的逻辑
-            rl.on('line', async (line) => {
+            rl.on('line', (line) => {
                 this.readTimes++
                 const data = JSON.parse(line); 
                 let batchNo = this.readTimes;
@@ -126,7 +133,7 @@ class walletTransfer_preset_check_duplicate {
             });
 
             // 在文件读取结束时关闭可写流
-            rl.on('close', async () => {
+            rl.on('close', () => {
                 console.log(`掃描warningStatus檔案完畢,讀取次數:${this.readTimes}`); 
                 Promise.all(promises).then((r) => {
                     console.log(`掃描warningStatus檔案總次數:${this.readTimes}`);
@@ -136,13 +143,13 @@ class walletTransfer_preset_check_duplicate {
                         console.log(`請至${outputFilePath_shouldInDBbutNot}查看這些應存在DB但沒存到，可將這些rid重新insert至DB`)
                     }
                     console.timeEnd('EXEC')
+                    process.exit();
                 });   
             });
 
- 
-
         } catch (err) {
             console.error(err)
+            return;
         }
 
     }
